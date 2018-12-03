@@ -1,9 +1,11 @@
+var backgroundColor = "#255C69", borderColor = "#0F2D35", solutionColor = "#FFD167";
+
 window.onload = function() {
-	var x = Math.floor(window.innerWidth/10), y = Math.floor(window.innerWidth/20), i, j, field, MazeRoom, DIRECTIONS, width=innerWidth, height=innerHeight;
+	var x = Math.floor(window.innerWidth/50), y = Math.floor(window.innerWidth/100), i, j, fieldObject, MazeRoom, DIRECTIONS, width=innerWidth, height=innerHeight;
 	DIRECTIONS = Object.freeze({"WEST":0, "NORTH":1, "EAST":2, "SOUTH":3});
 	MazeRoom = getMazeRoomConstructor();
-	field = generateMaze(createMaze(x,y,MazeRoom), DIRECTIONS, 0, 0);
-	drawMaze(field, x, y, width, height);
+	fieldObject = generateMaze(createMaze(x,y,MazeRoom), DIRECTIONS, 0, 0);
+	drawMaze(fieldObject, DIRECTIONS, x, y, width, height);
 }
 
 function getMazeRoomConstructor() {
@@ -15,6 +17,7 @@ function getMazeRoomConstructor() {
  	this.openEast = false;
  	this.openSouth = false;
  	this.visited = false;
+ 	this.nextDirection = 0;
  }
 }
 
@@ -30,7 +33,7 @@ var field = new Array(x), i, j;
 }
 
 function generateMaze(field, DIRECTIONS, currentX, currentY) {
-	var currentRoom, nextDirection, stack = new Array(), possibileNeighbours, done = false;
+	var currentRoom, nextDirection, stack = new Array(), pathStack = new Array(), possibileNeighbours, done = false, result = Object.create(Object);
 		currentRoom = field[currentX][currentY];
 	while(!done) {
 		currentRoom.visited = true;
@@ -61,9 +64,12 @@ function generateMaze(field, DIRECTIONS, currentX, currentY) {
 				case DIRECTIONS.EAST: currentX++; currentRoom.openEast = true; break;
 			}
 			stack.push(currentRoom);
-			log(currentX, currentY, possibileNeighbours);
 			currentRoom = field[currentX][currentY];
 		} else {
+			if (stack.length > pathStack.length) {
+				pathStack = stack.slice();
+				pathStack.push(currentRoom);
+			}
 			currentRoom = stack.pop();
 			currentY = currentRoom.y;
 			currentX = currentRoom.x;
@@ -72,7 +78,9 @@ function generateMaze(field, DIRECTIONS, currentX, currentY) {
 		if (currentX == 0 && currentY == 0 && possibileNeighbours.length == 0)
 			done = true;
 	}
-	return field;
+	result.path = pathStack;
+	result.field = field;
+	return result;
 }
 
 function getNextDirection(possibileNeighbours, DIRECTIONS) {
@@ -98,14 +106,14 @@ function log() {
 	}
 }
 
-function drawMaze(field, colCount, rowCount, width, height) {
-	var canvas, ctx, roomWidth=width/colCount, roomHeight=height/rowCount, nextX, nextY;
+function drawMaze(fieldObject, DIRECTIONS, colCount, rowCount, width, height) {
+	var canvas, ctx, roomWidth=Math.floor(width/colCount), roomHeight=Math.floor(height/rowCount), nextX, nextY, field = fieldObject.field, currentRoom, beginX, endX, beginY, endY;
 	canvas = document.getElementById("canvas");
 	canvas.width = width;
 	canvas.height = height;
 	ctx = canvas.getContext("2d");
-	ctx.fillStyle = "#A2D8C2";
-	ctx.strokeStyle = "#000000";
+	ctx.fillStyle = backgroundColor;
+	ctx.strokeStyle = borderColor;
 	ctx.fillRect(0,0,width, height);
 	ctx.lineWidth = 1;
 
@@ -136,4 +144,67 @@ function drawMaze(field, colCount, rowCount, width, height) {
 			ctx.stroke();
 		});
 	});
+
+	fieldObject.path = setDirections(fieldObject.path, DIRECTIONS);
+	fieldObject.path.forEach(function(currentRoom, index, allRooms) {
+		ctx.beginPath();
+		ctx.fillStyle = solutionColor;
+		ctx.strokeStyle = ctx.fillStyle;
+		if (index === 0 || index === allRooms.length -1) {
+			ctx.fillRect(roomWidth*currentRoom.x+1, roomHeight*currentRoom.y+1, roomWidth-2, roomHeight-2);
+		} else {
+			beginX = endX = currentRoom.x * roomWidth + Math.floor(roomWidth/2);
+			beginY = endY = currentRoom.y * roomHeight + Math.floor(roomHeight/2);
+			ctx.moveTo(beginX, beginY);
+			if (currentRoom.nextDirection == DIRECTIONS.NORTH || allRooms[index-1].nextDirection == DIRECTIONS.SOUTH) {
+				endY -= Math.floor(roomHeight/2);
+				ctx.lineTo(endX, endY);
+				endY = beginY;
+				ctx.moveTo(beginX,beginY);
+			}
+			if (currentRoom.nextDirection == DIRECTIONS.SOUTH || allRooms[index-1].nextDirection == DIRECTIONS.NORTH) {
+				endY += Math.floor(roomHeight/2);
+				ctx.lineTo(endX, endY);
+				endY = beginY;
+				ctx.moveTo(beginX,beginY);
+			}
+			if (currentRoom.nextDirection == DIRECTIONS.WEST || allRooms[index-1].nextDirection == DIRECTIONS.EAST) {
+				endX -= Math.floor(roomWidth/2);
+				ctx.lineTo(endX, endY);
+				endX = beginX;
+				ctx.moveTo(beginX,beginY);
+			} 
+			if (currentRoom.nextDirection == DIRECTIONS.EAST || allRooms[index-1].nextDirection == DIRECTIONS.WEST) {
+				endX += Math.floor(roomWidth/2);
+				ctx.lineTo(endX, endY);
+				endX = beginX;
+				ctx.moveTo(beginX,beginY);
+			}
+			ctx.stroke();
+		}
+	});
+
+	function setDirections(path, DIRECTIONS) {
+		var nextDirection = 0, currentX, currentY, nextX, nextY;
+		path.forEach(function(room, index, allRooms) {
+			if (index < allRooms.length-1) {
+				currentX = room.x;
+				currentY = room.y;
+				nextX = allRooms[index + 1].x;
+				nextY = allRooms[index + 1].y;
+				if (currentX < nextX) {
+					nextDirection = DIRECTIONS.EAST; 
+				} else if (currentX > nextX) {
+					nextDirection = DIRECTIONS.WEST;
+				} else if (currentY < nextY) {
+					nextDirection = DIRECTIONS.SOUTH;
+				} else if (currentY > nextY) {
+					nextDirection = DIRECTIONS.NORTH;
+				}
+				room.nextDirection = nextDirection;
+			}
+		});
+		return path;
+	}
+
 }
